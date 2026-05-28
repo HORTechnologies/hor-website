@@ -96,3 +96,100 @@
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* HOR Logo Floating Animation */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+/* HOR Navbar Logo Floating Animation - 25% reduced intensity */
+@keyframes float-navbar {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+[data-architecture="#1.1.1"] img {
+  animation: float-navbar 6s ease-in-out infinite;
+}
+
+/* Navbar Logo Styles */
+[data-architecture="#1.1.1"] {
+  margin-left: 24px;
+}
+
+[data-architecture="#1.1.1"] img,
+[data-architecture="#1.1.1.logo"] {
+  width: 240px;
+  height: 62px;
+  filter: drop-shadow(0 0 4px rgba(180, 195, 210, 0.25));
+  object-fit: contain;
+  image-rendering: auto;
+  background: transparent;
+}
+
+@media (max-width: 1024px) {
+  [data-architecture="#1.1.1"] img,
+  [data-architecture="#1.1.1.logo"] {
+    width: 240px;
+    height: 62px;
+    filter: drop-shadow(0 0 4px rgba(180, 195, 210, 0.25));
+  }
+}
+
+@media (max-width: 640px) {
+  [data-architecture="#1.1.1"] img,
+  [data-architecture="#1.1.1.mobile"] {
+    width: 170px;
+    height: 44px;
+    filter: none;
+  }
+}
+
+/* HOR Logo Responsive Styles */
+[data-architecture="#2.1"] img {
+  width: 520px;
+}
+
+/* Instant Logo Loading - No Fade Effects */
+[data-architecture="#2.1"],
+[data-architecture="#2.1"] img,
+[data-architecture="#2.1"] [data-architecture="#2.1.2"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  animation: float 6s ease-in-out infinite !important;
+}
+
+[data-architecture="#2.1.2"] {
+  animation: none !important;
+}
+
+[data-architecture="#2.1"] img {
+  animation-delay: 0s !important;
+}
+
+@media (max-width: 1024px) {
+  [data-architecture="#2.1"] img {
+    width: 420px;
+  }
+}
+
+@media (max-width: 640px) {
+  [data-architecture="#2.1"] img {
+    width: 280px;
+  }
+}

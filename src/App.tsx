@@ -1,204 +1,487 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 
 /**
  * =====================================================
  * ARCHITECTURE SYSTEM - #ARCHITECTURE-SYSTEM-005
- * VISUAL OVERLAY SYSTEM - #VISUAL-ARCHITECTURE-OVERLAY-006
+ * SMART INSPECTOR SYSTEM - #SMART-INSPECTOR-SYSTEM-009
  * =====================================================
  *
- * Keyboard Shortcut: CTRL + SHIFT + D
- * Toggles Developer Architecture Mode ON/OFF
+ * #1 = TOP NAVBAR
+ * #2 = HERO SECTION
+ * #3 = BACKGROUND SYSTEM
+ * #4 = SERVICES SECTION
+ * #5 = PROJECTS SECTION
+ * #6 = MOBILE SYSTEM
+ * #7 = FOOTER
+ * #8 = DEVELOPERS SECTION
+ * #9 = ARTICLES SECTION
+ * #10 = CLIENTS SECTION
  *
  * =====================================================
  */
 
 // =====================================================
-// ARCHITECTURE LABEL COMPONENT
+// SMART INTERACTIVE INSPECTOR SYSTEM
 // =====================================================
 
-interface ArchLabelProps {
+interface InspectorData {
   id: string;
-  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  name: string;
+  type: string;
+  section: string;
+  content: string;
+  rect: DOMRect;
 }
 
-const ArchLabel: React.FC<ArchLabelProps> = ({ id, position = 'top-left' }) => {
-  const positionStyles: Record<string, string> = {
-    'top-left': 'top-0 left-0',
-    'top-right': 'top-0 right-0',
-    'bottom-left': 'bottom-0 left-0',
-    'bottom-right': 'bottom-0 right-0',
-  };
+// Element name mapping based on data attributes
+const getElementInfo = (el: HTMLElement): InspectorData | null => {
+  const id = el.getAttribute('data-element-id') || el.getAttribute('data-section-id');
+  if (!id) return null;
 
-  const cornerStyles: Record<string, string> = {
-    'top-left': 'origin-top-left',
-    'top-right': 'origin-top-right',
-    'bottom-left': 'origin-bottom-left',
-    'bottom-right': 'origin-bottom-right',
+  // Get text content
+  const textContent = el.textContent?.trim().slice(0, 100) || '';
+
+  // Get tag name
+  const tagName = el.tagName.toLowerCase();
+
+  // Determine element type
+  let type = 'Element';
+  if (tagName === 'button') type = 'Button';
+  else if (tagName === 'a') type = 'Link';
+  else if (tagName === 'h1' || tagName === 'h2' || tagName === 'h3') type = 'Heading';
+  else if (tagName === 'p') type = 'Paragraph';
+  else if (tagName === 'img') type = 'Image';
+  else if (tagName === 'nav') type = 'Navigation';
+  else if (tagName === 'section') type = 'Section';
+  else if (tagName === 'footer') type = 'Footer';
+  else if (tagName === 'canvas') type = 'Canvas Animation';
+  else if (tagName === 'span') type = 'Text Span';
+  else if (tagName === 'div') type = 'Container';
+
+  // Determine section based on ID prefix
+  let section = 'Unknown';
+  if (id.startsWith('#1')) section = 'Navbar';
+  else if (id.startsWith('#2')) section = 'Hero Section';
+  else if (id.startsWith('#3')) section = 'Background System';
+  else if (id.startsWith('#4')) section = 'Services Section';
+  else if (id.startsWith('#5')) section = 'Projects Section';
+  else if (id.startsWith('#6')) section = 'Mobile System';
+  else if (id.startsWith('#7')) section = 'Footer';
+  else if (id.startsWith('#8')) section = 'Developers Section';
+  else if (id.startsWith('#9')) section = 'Articles Section';
+  else if (id.startsWith('#10')) section = 'Clients Section';
+
+  // Create readable name from ID
+  const nameParts = id.replace('#', '').split('.');
+  const name = nameParts.map(p => {
+    if (p.match(/^\d+$/)) return '';
+    return p.charAt(0).toUpperCase() + p.slice(1);
+  }).filter(Boolean).join(' ');
+
+  return {
+    id,
+    name: name || id,
+    type,
+    section,
+    content: textContent,
+    rect: el.getBoundingClientRect()
   };
+};
+
+// Smart Inspector Component
+const SmartInspector: React.FC<{ isActive: boolean }> = ({ isActive }) => {
+  const [hoveredElement, setHoveredElement] = useState<InspectorData | null>(null);
+  const [lockedElement, setLockedElement] = useState<InspectorData | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [showPanel, setShowPanel] = useState(false);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  const activeElement = lockedElement || hoveredElement;
+
+  // Mouse move handler
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    setMousePos({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Hover detection
+  const handleMouseOver = useCallback((e: MouseEvent) => {
+    if (!isActive) return;
+    if (lockedElement) return; // Don't update if locked
+
+    const target = e.target as HTMLElement;
+    const inspectableEl = target.closest('[data-element-id], [data-section-id]') as HTMLElement;
+
+    if (inspectableEl && !inspectableEl.closest('.inspector-panel') && !inspectableEl.closest('.dev-mode-toggle')) {
+      const info = getElementInfo(inspectableEl);
+      if (info) {
+        setHoveredElement(info);
+        setShowPanel(true);
+      }
+    } else if (!target.closest('.inspector-panel') && !target.closest('.dev-mode-toggle')) {
+      setHoveredElement(null);
+      setShowPanel(false);
+    }
+  }, [isActive, lockedElement]);
+
+  // Click to lock
+  const handleClick = useCallback((e: MouseEvent) => {
+    if (!isActive) return;
+
+    const target = e.target as HTMLElement;
+    const inspectableEl = target.closest('[data-element-id], [data-section-id]') as HTMLElement;
+
+    if (inspectableEl && !inspectableEl.closest('.inspector-panel') && !inspectableEl.closest('.dev-mode-toggle')) {
+      const info = getElementInfo(inspectableEl);
+      if (info) {
+        setLockedElement(prev => prev?.id === info.id ? null : info);
+        setShowPanel(true);
+      }
+    } else if (!target.closest('.inspector-panel') && !target.closest('.dev-mode-toggle')) {
+      setLockedElement(null);
+      setShowPanel(false);
+    }
+  }, [isActive]);
+
+  // Escape to unlock
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && lockedElement) {
+        setLockedElement(null);
+        setShowPanel(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lockedElement]);
+
+  // Attach event listeners
+  useEffect(() => {
+    if (!isActive) return;
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseover', handleMouseOver);
+    window.addEventListener('click', handleClick);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseover', handleMouseOver);
+      window.removeEventListener('click', handleClick);
+    };
+  }, [isActive, handleMouseMove, handleMouseOver, handleClick]);
+
+  if (!isActive) return null;
+
+  // Calculate panel position
+  const panelWidth = 280;
+  const panelHeight = 320;
+  let panelX = mousePos.x + 20;
+  let panelY = mousePos.y - 20;
+
+  // Keep panel in viewport
+  if (panelX + panelWidth > window.innerWidth - 20) {
+    panelX = mousePos.x - panelWidth - 20;
+  }
+  if (panelY + panelHeight > window.innerHeight - 20) {
+    panelY = mousePos.y - panelHeight + 40;
+  }
+  if (panelY < 20) {
+    panelY = 20;
+  }
 
   return (
-    <div
-      className={`absolute ${positionStyles[position]} m-2 z-[9999] ${cornerStyles[position]}`}
-      style={{ pointerEvents: 'none' }}
-    >
-      <div
-        className="px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider
-                   bg-black/80 backdrop-blur-sm border border-blue-500/50
-                   text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)]
-                   animate-pulse-subtle"
-        style={{
-          animation: 'pulse-subtle 2s ease-in-out infinite',
-        }}
-      >
-        {id}
-      </div>
-    </div>
+    <>
+      {/* Highlight border for hovered element */}
+      {hoveredElement && !lockedElement && (
+        <div
+          className="pointer-events-none fixed z-[99980] transition-all duration-200"
+          style={{
+            left: hoveredElement.rect.left - 2,
+            top: hoveredElement.rect.top - 2,
+            width: hoveredElement.rect.width + 4,
+            height: hoveredElement.rect.height + 4,
+            boxShadow: '0 0 20px rgba(59, 130, 246, 0.6), inset 0 0 10px rgba(59, 130, 246, 0.3)',
+            border: '2px solid rgba(59, 130, 246, 0.8)',
+            borderRadius: '6px',
+            animation: 'inspector-pulse 1.5s ease-in-out infinite',
+          }}
+        />
+      )}
+
+      {/* Locked element highlight */}
+      {lockedElement && (
+        <div
+          className="pointer-events-none fixed z-[99980]"
+          style={{
+            left: lockedElement.rect.left - 2,
+            top: lockedElement.rect.top - 2,
+            width: lockedElement.rect.width + 4,
+            height: lockedElement.rect.height + 4,
+            boxShadow: '0 0 30px rgba(59, 130, 246, 0.8), inset 0 0 15px rgba(59, 130, 246, 0.4)',
+            border: '2px solid rgba(59, 130, 246, 1)',
+            borderRadius: '6px',
+            background: 'rgba(59, 130, 246, 0.05)',
+          }}
+        />
+      )}
+
+      {/* Inspector Panel */}
+      {showPanel && activeElement && (
+        <div
+          className="fixed z-[99999] inspector-panel"
+          style={{
+            left: lockedElement ? undefined : panelX,
+            right: lockedElement ? 20 : undefined,
+            top: lockedElement ? 20 : panelY,
+            width: panelWidth,
+          }}
+        >
+          {/* Glow effect */}
+          <div
+            className="absolute -inset-2 rounded-2xl opacity-40"
+            style={{
+              background: 'radial-gradient(ellipse, rgba(59, 130, 246, 0.4) 0%, transparent 70%)',
+              filter: 'blur(20px)',
+            }}
+          />
+
+          {/* Main panel */}
+          <div
+            className="relative bg-black/95 backdrop-blur-xl border border-blue-500/50 rounded-xl overflow-hidden"
+            style={{
+              boxShadow: '0 0 50px rgba(59, 130, 246, 0.3), inset 0 0 40px rgba(59, 130, 246, 0.05)',
+            }}
+          >
+            {/* Header */}
+            <div
+              className="px-4 py-3 border-b border-blue-500/30 flex items-center justify-between"
+              style={{
+                background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.25) 0%, transparent 100%)',
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-blue-400 text-xs font-mono font-bold tracking-wider">INSPECTOR</span>
+              </div>
+              {lockedElement && (
+                <button
+                  onClick={() => {
+                    setLockedElement(null);
+                    setShowPanel(false);
+                  }}
+                  className="text-gray-400 hover:text-white transition-colors text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="p-4 space-y-3">
+              {/* ID Field */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">ID</label>
+                <div
+                  className="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30"
+                  style={{ boxShadow: '0 0 15px rgba(59, 130, 246, 0.2)' }}
+                >
+                  <span className="text-blue-400 text-sm font-mono font-bold">
+                    {activeElement.id}
+                  </span>
+                </div>
+              </div>
+
+              {/* Name Field */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">Name</label>
+                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-gray-300 text-sm font-medium">
+                    {activeElement.name}
+                  </span>
+                </div>
+              </div>
+
+              {/* Type & Section Row */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">Type</label>
+                  <div className="px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-center">
+                    <span className="text-gray-400 text-xs">
+                      {activeElement.type}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">Section</label>
+                  <div className="px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-center">
+                    <span className="text-gray-400 text-xs">
+                      {activeElement.section}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content Field */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">Content</label>
+                <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 max-h-16 overflow-hidden">
+                  <span className="text-gray-400 text-xs font-mono truncate block">
+                    {activeElement.content || '(empty)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer hint */}
+            <div className="px-4 py-2 border-t border-white/5 bg-black/50">
+              <p className="text-[9px] font-mono text-gray-600 text-center">
+                {lockedElement ? 'ESC to unlock • Click elsewhere to close' : 'Click to lock • ESC to close'}
+              </p>
+            </div>
+
+            {/* Corner decorations */}
+            <div className="absolute top-0 left-0 w-6 h-6">
+              <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-blue-500/60" />
+            </div>
+            <div className="absolute top-0 right-0 w-6 h-6">
+              <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-blue-500/60" />
+            </div>
+            <div className="absolute bottom-0 left-0 w-6 h-6">
+              <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-blue-500/60" />
+            </div>
+            <div className="absolute bottom-0 right-0 w-6 h-6">
+              <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-blue-500/60" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes inspector-pulse {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+    </>
   );
 };
 
-// =====================================================
-// INLINE ARCHITECTURE LABEL
-// =====================================================
-
-interface InlineLabelProps {
-  id: string;
-  className?: string;
-}
-
-const InlineLabel: React.FC<InlineLabelProps> = ({ id, className = '' }) => {
-  return (
-    <span
-      className={`absolute -top-6 left-0 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold
-                  bg-black/80 backdrop-blur-sm border border-blue-500/50
-                  text-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.3)] whitespace-nowrap z-50
-                  opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${className}`}
-      style={{ pointerEvents: 'none' }}
-    >
-      {id}
-    </span>
-  );
-};
-
-// =====================================================
-// DEVELOPER MODE TOGGLE COMPONENT
-// =====================================================
-
+// Developer Mode Toggle Button
 const DeveloperModeToggle: React.FC<{ isActive: boolean; onToggle: () => void }> = ({ isActive, onToggle }) => {
   return (
     <button
       onClick={onToggle}
-      className={`fixed bottom-6 right-6 z-[99999] px-4 py-2 rounded-lg font-mono text-xs font-bold tracking-wider
-                 transition-all duration-300 backdrop-blur-xl border
-                 ${isActive
-                   ? 'bg-blue-600/90 border-blue-400 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)]'
-                   : 'bg-black/80 border-white/20 text-gray-400 hover:border-blue-500/50 hover:text-blue-400'
-                 }`}
-      title="Toggle Developer Mode (Ctrl+Shift+D)"
+      className={`fixed bottom-6 right-6 z-[99999] group transition-all duration-300
+        ${isActive ? 'scale-110' : 'hover:scale-105'}`}
     >
-      <span className="flex items-center gap-2">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-        </svg>
-        {isActive ? 'DEV MODE ON' : 'DEV MODE'}
-      </span>
+      <div
+        className={`absolute -inset-1 rounded-xl opacity-50 transition-opacity duration-300
+          ${isActive ? 'bg-blue-500/30' : 'bg-transparent'}`}
+        style={{ filter: 'blur(10px)' }}
+      />
+
+      <div
+        className={`relative px-5 py-3 rounded-xl border backdrop-blur-xl transition-all duration-300
+          ${isActive
+            ? 'bg-blue-600/90 border-blue-400 text-white shadow-[0_0_30px_rgba(59,130,246,0.6)]'
+            : 'bg-black/80 border-white/20 text-gray-400 hover:border-blue-500/50'
+          }`}
+      >
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`} />
+          <span className="font-mono text-xs font-bold tracking-wider">
+            {isActive ? '✓ INSPECTOR ON' : 'INSPECTOR'}
+          </span>
+        </div>
+
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="px-2 py-1 rounded bg-black/90 border border-white/10 text-[10px] font-mono text-gray-400 whitespace-nowrap">
+            ALT + SHIFT + X
+          </div>
+        </div>
+      </div>
     </button>
   );
 };
 
-// =====================================================
-// ARCHITECTURE OVERLAY PANEL
-// =====================================================
-
-const ArchitectureOverlay: React.FC<{ isActive: boolean }> = ({ isActive }) => {
-  const [activeSection, setActiveSection] = useState<string | null>(null);
-
-  const sections = [
-    { id: '#1', name: 'Top Navbar', children: ['#1.1 Logo Area', '#1.2 Right Area', '#1.2.1 Language', '#1.2.2 CTA Button', '#1.2.3 Mobile Menu'] },
-    { id: '#2', name: 'Hero Section', children: ['#2.1 Branding', '#2.1.1 Hero Logo', '#2.1.2 Company Name', '#2.2 Title Area', '#2.2.1 Main Title', '#2.3 Buttons'] },
-    { id: '#3', name: 'Background', children: ['#3.1 Grid', '#3.2 Particles', '#3.3 Ambient Glow'] },
-    { id: '#4', name: 'Services', children: ['#4.1 Container', '#4.1.1 Card 1', '#4.1.2 Card 2', '#4.1.3 Card 3', '#4.1.4 Card 4', '#4.1.5 Card 5'] },
-    { id: '#5', name: 'Projects', children: ['#5.1 Header', '#5.2 Grid', '#5.2.1 Project 1', '#5.2.2 Project 2', '#5.2.3 Project 3', '#5.2.4 Project 4', '#5.2.5 Project 5', '#5.2.6 Project 6'] },
-    { id: '#6', name: 'Mobile System', children: ['#6.1 Nav Items', '#6.2 Menu', '#6.3 CTA Button', '#6.4 Mobile Logo'] },
-    { id: '#7', name: 'Footer', children: ['#7.1 Logo', '#7.2 Navigation', '#7.3 Social Icons', '#7.4 Copyright'] },
-    { id: '#8', name: 'Developers', children: ['#8.1 Dev 1', '#8.2 Dev 2', '#8.3 Dev 3', '#8.4 Dev 4'] },
-    { id: '#9', name: 'Articles', children: ['#9.1 Article 1', '#9.2 Article 2', '#9.3 Article 3'] },
-    { id: '#10', name: 'Clients', children: ['#10.1 Client Logo', '#10.2 Client Logo', '#10.3 Client Logo'] },
-  ];
-
+// Architecture Info Panel
+const ArchitectureInfoPanel: React.FC<{ isActive: boolean }> = ({ isActive }) => {
   if (!isActive) return null;
 
   return (
-    <div className="fixed top-20 left-6 z-[99998] w-72 max-h-[calc(100vh-160px)] overflow-y-auto
-                    bg-black/90 backdrop-blur-xl border border-blue-500/30 rounded-xl shadow-[0_0_30px_rgba(59,130,246,0.2)]">
-      {/* Header */}
-      <div className="sticky top-0 bg-black/95 border-b border-blue-500/30 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <span className="text-blue-400 font-mono text-xs font-bold tracking-wider">
-            #ARCHITECTURE-SYSTEM-005
-          </span>
+    <div className="fixed top-4 left-4 z-[99999] max-w-xs group">
+      <div
+        className="absolute -inset-1 rounded-xl opacity-30"
+        style={{
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%)',
+          filter: 'blur(15px)',
+        }}
+      />
+
+      <div
+        className="relative bg-black/90 backdrop-blur-xl border border-blue-500/40 rounded-xl overflow-hidden"
+        style={{
+          boxShadow: '0 0 40px rgba(59, 130, 246, 0.2), inset 0 0 30px rgba(59, 130, 246, 0.05)',
+        }}
+      >
+        <div
+          className="px-4 py-3 border-b border-blue-500/30 flex items-center gap-2"
+          style={{
+            background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.2) 0%, transparent 100%)',
+          }}
+        >
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+          <span className="text-blue-400 text-xs font-mono font-bold tracking-wider">SMART INSPECTOR</span>
         </div>
-        <p className="text-gray-500 text-[10px] mt-1 font-mono">
-          Press CTRL+SHIFT+D to toggle
-        </p>
-      </div>
 
-      {/* Section List */}
-      <div className="p-2 space-y-1">
-        {sections.map((section) => (
-          <div key={section.id} className="group">
-            <button
-              onClick={() => setActiveSection(activeSection === section.id ? null : section.id)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-all
-                         ${activeSection === section.id
-                           ? 'bg-blue-500/20 text-blue-400'
-                           : 'hover:bg-white/5 text-gray-400 hover:text-white'
-                         }`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="font-mono text-xs font-bold">{section.id}</span>
-                <span className="text-xs">{section.name}</span>
-              </span>
-              <svg
-                className={`w-3 h-3 transition-transform ${activeSection === section.id ? 'rotate-180' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {/* Children */}
-            {activeSection === section.id && (
-              <div className="ml-4 mt-1 space-y-0.5 border-l border-blue-500/20 pl-2">
-                {section.children.map((child, idx) => (
-                  <div
-                    key={idx}
-                    className="px-2 py-1 rounded text-[10px] font-mono text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 cursor-pointer transition-colors"
-                  >
-                    {child}
-                  </div>
-                ))}
-              </div>
-            )}
+        <div className="p-4 space-y-3">
+          <div className="text-[10px] font-mono text-gray-400 space-y-1">
+            <div className="flex justify-between">
+              <span>Status:</span>
+              <span className="text-green-400">ACTIVE</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Mode:</span>
+              <span className="text-blue-400">HOVER/CLICK</span>
+            </div>
           </div>
-        ))}
-      </div>
 
-      {/* Footer */}
-      <div className="sticky bottom-0 bg-black/95 border-t border-blue-500/30 px-4 py-2">
-        <p className="text-[9px] text-gray-600 font-mono">
-          Hover elements to see IDs
-        </p>
+          <div className="border-t border-white/5 pt-3">
+            <p className="text-[9px] font-mono text-gray-500 mb-2">CONTROLS</p>
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <div className="px-2 py-1 rounded bg-white/5 border border-white/10 text-gray-400">
+                HOVER
+              </div>
+              <div className="px-2 py-1 rounded bg-white/5 border border-white/10 text-gray-400">
+                PREVIEW
+              </div>
+              <div className="px-2 py-1 rounded bg-white/5 border border-white/10 text-gray-400">
+                CLICK
+              </div>
+              <div className="px-2 py-1 rounded bg-white/5 border border-white/10 text-gray-400">
+                LOCK
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/5 pt-3">
+            <p className="text-[9px] font-mono text-gray-500 mb-1">SHORTCUT</p>
+            <p className="text-[9px] font-mono text-gray-600">
+              ALT + SHIFT + X
+            </p>
+          </div>
+        </div>
+
+        <div className="absolute top-0 right-0 w-8 h-8">
+          <div className="absolute top-2 right-2 w-4 h-4 border-t border-r border-blue-500/40" />
+        </div>
       </div>
     </div>
   );
 };
 
 // =====================================================
-// INTRO ANIMATION
+// SECTION #1: TOP NAVBAR
 // =====================================================
 
 const IntroAnimation: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
@@ -312,76 +595,29 @@ const IntroAnimation: React.FC<{ onComplete: () => void }> = ({ onComplete }) =>
   );
 };
 
-// =====================================================
-// HOR LOGO COMPONENT
-// =====================================================
-
+// HOR Logo Component
 interface HORLogoProps {
   className?: string;
   section?: string;
-  showLabel?: boolean;
-  devMode?: boolean;
 }
 
-const HORLogo: React.FC<HORLogoProps> = ({ className = '', section = '#1.1.1', showLabel = false, devMode = false }) => {
+const HORLogo: React.FC<HORLogoProps> = ({ className = '', section = '#1.1.1' }) => {
   return (
-    <div
-      className={`relative group ${className}`}
-      data-component-id={section}
-    >
-      {devMode && showLabel && (
-        <InlineLabel id={section} />
-      )}
-      <div className="absolute inset-0 bg-gradient-to-r from-gray-400/20 via-white/20 to-gray-400/20 rounded-lg blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-      <div className="relative flex items-center gap-3">
-        <div className="relative w-10 h-10">
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-300/30 to-gray-500/20 rounded-lg blur-sm" />
-          <div
-            className="relative w-full h-full rounded-lg bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 flex items-center justify-center overflow-hidden"
-            data-element-id={`${section}.icon`}
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/60 to-transparent" />
-            <span
-              className="relative text-gray-800 font-bold text-lg tracking-wider"
-              style={{
-                textShadow: '0 1px 2px rgba(255,255,255,0.8), 0 -1px 1px rgba(0,0,0,0.1)'
-              }}
-              data-element-id={`${section}.letter`}
-            >
-              H
-            </span>
-          </div>
-          <div className="absolute -bottom-1 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-        </div>
-        <span
-          className="relative text-lg font-semibold tracking-wider"
-          style={{
-            background: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 25%, #E8E8E8 50%, #A8A8A8 75%, #D0D0D0 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            filter: 'drop-shadow(0 1px 2px rgba(255,255,255,0.3))'
-          }}
-          data-element-id={`${section}.text`}
-        >
-          HOR
-        </span>
-      </div>
-      <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-3px); }
-        }
-      `}</style>
+    <div className={`relative group ${className}`} data-architecture={section}>
+      <img
+        src="/hor-logo.png"
+        alt="HOR Logo"
+        loading="eager"
+        fetchPriority="high"
+        className="h-10 w-[148px] object-contain bg-transparent block"
+        data-architecture="#1.1.1.logo"
+      />
     </div>
   );
 };
 
-// =====================================================
-// NAVIGATION - #1
-// =====================================================
-
-const Navigation: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+// Navigation Component
+const Navigation: React.FC = () => {
   const { t, language, setLanguage } = useLanguage();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -407,26 +643,20 @@ const Navigation: React.FC<{ devMode: boolean }> = ({ devMode }) => {
       }`}
       data-section-id="#1"
     >
-      {devMode && <ArchLabel id="#1" position="top-left" />}
-
       <div className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between">
-        {/* #1.1 = Navbar Left Area */}
-        <div data-element-id="#1.1" className="flex items-center relative">
-          {devMode && <InlineLabel id="#1.1" />}
-          {/* #1.1.1 = Navbar Logo Icon */}
+        <div data-element-id="#1.1" className="flex items-center">
           <a href="#hero" className="flex items-center gap-2 group" data-element-id="#1.1.1">
-            <HORLogo section="#1.1.1" devMode={devMode} showLabel={true} />
+            <HORLogo section="#1.1.1" />
           </a>
         </div>
 
-        {/* Nav Items */}
-        <div className="hidden lg:flex items-center gap-1 relative" data-element-id="#1.0.nav-items">
-          {devMode && <InlineLabel id="#1.0" className="-top-8" />}
-          {navItems.map((item) => (
+        <div className="hidden lg:flex items-center gap-1" data-element-id="#1.0.nav-items">
+          {navItems.map((item, idx) => (
             <a
               key={item.key}
               href={item.href}
               className="px-4 py-2 text-gray-400 hover:text-white transition-colors duration-300 relative group"
+              data-element-id={`#1.0.nav-items.${idx + 1}`}
             >
               {t(item.key)}
               <span className="absolute bottom-0 left-0 w-0 h-[1px] bg-blue-500 group-hover:w-full transition-all duration-300" />
@@ -434,37 +664,28 @@ const Navigation: React.FC<{ devMode: boolean }> = ({ devMode }) => {
           ))}
         </div>
 
-        {/* #1.2 = Navbar Right Area */}
-        <div className="flex items-center gap-3 relative" data-element-id="#1.2">
-          {devMode && <InlineLabel id="#1.2" className="-top-6 right-0" />}
-
-          {/* #1.2.1 = Language Switcher */}
+        <div className="flex items-center gap-3" data-element-id="#1.2">
           <button
             onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-            className="w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center hover:border-blue-500/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all duration-300 relative"
+            className="w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center hover:border-blue-500/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all duration-300"
             data-element-id="#1.2.1"
           >
-            {devMode && <InlineLabel id="#1.2.1" className="-top-6" />}
             <span className="text-xs font-medium text-gray-300">{language === 'en' ? 'AR' : 'EN'}</span>
           </button>
 
-          {/* #1.2.2 = Primary CTA Button */}
           <a
             href="#contact"
-            className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] transition-all duration-300 relative"
+            className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] transition-all duration-300"
             data-element-id="#1.2.2"
           >
-            {devMode && <InlineLabel id="#1.2.2" className="-top-6" />}
             {t('nav.getStarted')}
           </a>
 
-          {/* #1.2.3 = Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center relative"
+            className="lg:hidden w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center"
             data-element-id="#1.2.3"
           >
-            {devMode && <InlineLabel id="#1.2.3" className="-top-6" />}
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {mobileMenuOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -476,53 +697,39 @@ const Navigation: React.FC<{ devMode: boolean }> = ({ devMode }) => {
         </div>
       </div>
 
-      {/* #6.2 = Mobile Menu */}
       <div
         className={`lg:hidden transition-all duration-300 overflow-hidden ${
           mobileMenuOpen ? 'max-h-96 border-t border-white/5' : 'max-h-0'
-        } bg-[#0B0B0B]/95 backdrop-blur-xl relative`}
+        } bg-[#0B0B0B]/95 backdrop-blur-xl`}
         data-element-id="#6.2"
       >
-        {devMode && <InlineLabel id="#6.2" className="top-2 left-2" />}
-
-        {/* #6.4 = Mobile Logo */}
         <div className="px-6 py-4 border-b border-white/5" data-element-id="#6.4">
-          <div className="flex items-center gap-2">
-            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 flex items-center justify-center">
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/60 to-transparent" />
-              <span className="relative text-gray-800 font-bold text-sm">H</span>
-            </div>
-            <span className="text-lg font-semibold tracking-wider" style={{
-              background: 'linear-gradient(135deg, #E8E8E8 0%, #C0C0C0 25%, #E8E8E8 50%, #A8A8A8 75%, #D0D0D0 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text'
-            }}>
-              HOR
-            </span>
-          </div>
+          <img
+            src="/hor-logo.png"
+            alt="HOR Logo"
+            loading="eager"
+            fetchPriority="high"
+            className="h-[34px] w-[108px] object-contain bg-transparent block"
+            data-architecture="#1.1.1.mobile"
+          />
         </div>
-
-        {/* #6.1 = Mobile Navigation Items */}
-        <div className="px-6 py-4 space-y-2 relative" data-element-id="#6.1">
-          {devMode && <InlineLabel id="#6.1" className="top-2 right-2" />}
-          {navItems.map((item) => (
+        <div className="px-6 py-4 space-y-2" data-element-id="#6.1">
+          {navItems.map((item, idx) => (
             <a
               key={item.key}
               href={item.href}
               onClick={() => setMobileMenuOpen(false)}
               className="block px-4 py-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors duration-300"
+              data-element-id={`#6.1.${idx + 1}`}
             >
               {t(item.key)}
             </a>
           ))}
-          {/* #6.3 = Mobile CTA Button */}
           <a
             href="#contact"
-            className="block px-4 py-3 text-center bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium rounded-lg relative"
+            className="block px-4 py-3 text-center bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium rounded-lg"
             data-element-id="#6.3"
           >
-            {devMode && <InlineLabel id="#6.3" className="-top-6 left-0" />}
             {t('nav.getStarted')}
           </a>
         </div>
@@ -532,10 +739,10 @@ const Navigation: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 };
 
 // =====================================================
-// BACKGROUND SYSTEM - #3
+// SECTION #3: BACKGROUND SYSTEM
 // =====================================================
 
-const FloatingParticles: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const FloatingParticles: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -621,12 +828,9 @@ const FloatingParticles: React.FC<{ devMode: boolean }> = ({ devMode }) => {
   );
 };
 
-// #3.1 = Grid Background
-const GridBackground: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const GridBackground: React.FC = () => {
   return (
-    <div className="absolute inset-0 relative" data-element-id="#3.1">
-      {devMode && <InlineLabel id="#3.1" className="top-4 left-4" />}
-      {devMode && <InlineLabel id="#3.2" className="top-4 right-4" />}
+    <div className="absolute inset-0" data-element-id="#3.1">
       <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-transparent to-[#050505] z-10" />
       <div
         className="absolute inset-0 opacity-20"
@@ -645,10 +849,10 @@ const GridBackground: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 };
 
 // =====================================================
-// HERO SECTION - #2
+// SECTION #2: HERO SECTION
 // =====================================================
 
-const HeroSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const HeroSection: React.FC = () => {
   const { t, isRTL } = useLanguage();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -662,11 +866,9 @@ const HeroSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 
   return (
     <section id="hero" className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[#050505]" data-section-id="#2">
-      {devMode && <ArchLabel id="#2" position="top-left" />}
-      <GridBackground devMode={devMode} />
-      <FloatingParticles devMode={devMode} />
+      <GridBackground />
+      <FloatingParticles />
 
-      {/* #3.3 = Ambient Glow */}
       <div
         className="absolute w-96 h-96 rounded-full pointer-events-none transition-all duration-1000 ease-out"
         style={{
@@ -675,108 +877,75 @@ const HeroSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
           top: mousePos.y - 192,
         }}
         data-element-id="#3.3"
-      >
-        {devMode && <InlineLabel id="#3.3" className="top-0 left-0" />}
-      </div>
+      />
 
       <div className="relative z-20 max-w-4xl mx-auto px-6 text-center">
-        {/* #2.1 = Hero Branding Area */}
-        <div className="mb-8 flex justify-center relative" data-element-id="#2.1">
-          {devMode && <InlineLabel id="#2.1" className="top-0" />}
-          <div className="group">
-            <div className="relative inline-flex items-center gap-4">
-              {/* #2.1.1 = Hero Main Logo */}
-              <div className="relative w-16 h-16" data-element-id="#2.1.1">
-                {devMode && <InlineLabel id="#2.1.1" className="top-0" />}
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-300/40 to-gray-500/30 rounded-xl blur-md" />
-                <div
-                  className="relative w-full h-full rounded-xl bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 flex items-center justify-center overflow-hidden border border-white/20 shadow-[0_0_40px_rgba(255,255,255,0.1)]"
-                  data-element-id="#2.1.1.icon"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/50 to-transparent" />
-                  <span
-                    className="relative text-gray-800 font-bold text-2xl tracking-wider"
-                    style={{
-                      textShadow: '0 1px 3px rgba(255,255,255,0.9), 0 -1px 1px rgba(0,0,0,0.1)'
-                    }}
-                    data-element-id="#2.1.1.letter"
-                  >
-                    H
-                  </span>
-                </div>
-                <div className="absolute -bottom-1 left-1/4 right-1/4 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-              </div>
+        {/* NEW #2.1 - HOR Main Logo System */}
+        <div
+          className="mb-8 flex justify-center"
+          data-architecture="#2.1"
+          style={{ marginTop: '20px', marginBottom: '10px' }}
+        >
+          {/* #2.1.2 - Logo Glow Layer */}
+          <div
+            className="relative flex items-center justify-center"
+            data-architecture="#2.1.2"
+          >
+            {/* Glow Effect */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              data-architecture="#2.1.2.glow"
+              style={{
+                background: 'radial-gradient(circle, rgba(120,180,255,0.18) 0%, rgba(120,180,255,0.08) 35%, transparent 75%)',
+                filter: 'blur(80px)',
+                opacity: 0.9,
+                width: '600px',
+                height: '300px',
+                transform: 'translate(-40px, -50px)',
+              }}
+            />
 
-              {/* #2.1.2 = Hero Company Name */}
-              <span
-                className="relative text-2xl font-bold tracking-[0.3em] relative"
-                style={{
-                  background: 'linear-gradient(135deg, #F0F0F0 0%, #D0D0D0 25%, #E8E8E8 50%, #B8B8B8 75%, #E0E0E0 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                  filter: 'drop-shadow(0 2px 4px rgba(255,255,255,0.4))'
-                }}
-                data-element-id="#2.1.2"
-              >
-                {devMode && <InlineLabel id="#2.1.2" className="-top-6" />}
-                HOR
-              </span>
-
-              {/* #2.1.3 = Hero Small Branding Text */}
-              <span className="text-gray-500 text-sm tracking-widest relative" data-element-id="#2.1.3">
-                {devMode && <InlineLabel id="#2.1.3" className="-top-6" />}
-                TECNOLOGIES
-              </span>
-            </div>
+            {/* #2.1.1 + #2.1.3 - Main Transparent Logo Image with Float Animation */}
+            <img
+              src="/hor-logo.png"
+              alt="HOR Logo"
+              loading="eager"
+              fetchPriority="high"
+              className="relative w-[520px] max-w-full object-contain"
+              data-architecture="#2.1.1 #2.1.3"
+              style={{
+                animation: 'float 6s ease-in-out infinite',
+                background: 'transparent',
+                opacity: '1',
+                visibility: 'visible',
+              }}
+            />
           </div>
         </div>
 
-        {/* #2.2 = Hero Title Area */}
-        <div className="relative" data-element-id="#2.2">
-          {devMode && <InlineLabel id="#2.2" className="top-0 left-0" />}
-
-          {/* #2.2.1 = Main Title */}
-          <h1
-            className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold mb-6 tracking-tight relative"
-            data-element-id="#2.2.1"
-          >
-            {devMode && <InlineLabel id="#2.2.1" className="-top-6" />}
-            <span className="bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-              {t('hero.title')}
-            </span>
-          </h1>
-
-          {/* #2.2.2 = Subtitle Text */}
+        {/* Keep #2.2.2 and #2.2.3 exactly as they are */}
+        <div data-element-id="#2.2">
           <p
-            className="text-xl sm:text-2xl text-blue-400 font-medium mb-4 tracking-wide relative"
+            className="text-xl sm:text-2xl text-blue-400 font-medium mb-4 tracking-wide"
             data-element-id="#2.2.2"
           >
-            {devMode && <InlineLabel id="#2.2.2" className="-top-6" />}
             {t('hero.subtitle')}
           </p>
 
-          {/* #2.2.3 = Description Text */}
           <p
-            className="text-lg text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed relative"
+            className="text-lg text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed"
             data-element-id="#2.2.3"
           >
-            {devMode && <InlineLabel id="#2.2.3" className="-top-6" />}
             {t('hero.description')}
           </p>
         </div>
 
-        {/* #2.3 = Hero Buttons Area */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 relative" data-element-id="#2.3">
-          {devMode && <InlineLabel id="#2.3" className="top-0 left-0" />}
-
-          {/* #2.3.1 = Primary Button */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4" data-element-id="#2.3">
           <a
             href="#projects"
             className="group relative px-8 py-4 rounded-xl overflow-hidden"
             data-element-id="#2.3.1"
           >
-            {devMode && <InlineLabel id="#2.3.1" className="-top-6" />}
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl" />
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-blue-400 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="absolute inset-0 rounded-xl border border-white/20" />
@@ -788,20 +957,17 @@ const HeroSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
             </span>
           </a>
 
-          {/* #2.3.2 = Secondary Button */}
           <a
             href="#contact"
-            className="px-8 py-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-blue-500/50 text-white font-medium transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.2)] relative"
+            className="px-8 py-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-blue-500/50 text-white font-medium transition-all duration-300 hover:shadow-[0_0_30px_rgba(59,130,246,0.2)]"
             data-element-id="#2.3.2"
           >
-            {devMode && <InlineLabel id="#2.3.2" className="-top-6" />}
             {t('hero.contact')}
           </a>
         </div>
       </div>
 
-      {/* Scroll indicator */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce">
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 animate-bounce" data-element-id="#2.scroll">
         <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
         </svg>
@@ -811,7 +977,7 @@ const HeroSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 };
 
 // =====================================================
-// PROJECT CARD
+// SECTION #4 & #5: SERVICES & PROJECTS
 // =====================================================
 
 interface ProjectCardProps {
@@ -821,10 +987,9 @@ interface ProjectCardProps {
   tags: string[];
   delay: number;
   cardIndex: number;
-  devMode: boolean;
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ image, titleKey, descKey, tags, delay, cardIndex, devMode }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ image, titleKey, descKey, tags, delay, cardIndex }) => {
   const { t } = useLanguage();
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -851,9 +1016,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ image, titleKey, descKey, tag
       }`}
       data-element-id={`#5.2.${cardIndex + 1}`}
     >
-      {devMode && <InlineLabel id={`#5.2.${cardIndex + 1}`} className="top-2 left-2" />}
-
-      <div className="aspect-[4/3] overflow-hidden relative">
+      <div className="aspect-[4/3] overflow-hidden">
         <img
           src={image}
           alt={t(titleKey)}
@@ -876,6 +1039,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ image, titleKey, descKey, tag
             <span
               key={i}
               className="px-3 py-1 text-xs rounded-full bg-white/5 border border-white/10 text-gray-300"
+              data-element-id={`#5.2.${cardIndex + 1}.tag.${i + 1}`}
             >
               {t(`tag.${tag}`)}
             </span>
@@ -888,11 +1052,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ image, titleKey, descKey, tag
   );
 };
 
-// =====================================================
-// PROJECTS SECTION - #5
-// =====================================================
-
-const ProjectsSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const ProjectsSection: React.FC = () => {
   const { t } = useLanguage();
 
   const projects = [
@@ -905,13 +1065,9 @@ const ProjectsSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
   ];
 
   return (
-    <section id="projects" className="py-32 bg-[#050505] relative" data-section-id="#5">
-      {devMode && <ArchLabel id="#5" position="top-left" />}
-
+    <section id="projects" className="py-32 bg-[#050505]" data-section-id="#5">
       <div className="max-w-7xl mx-auto px-6">
-        {/* #5.1 = Projects Header */}
-        <div className="text-center mb-16 relative" data-element-id="#5.1">
-          {devMode && <InlineLabel id="#5.1" className="top-0 left-0" />}
+        <div className="text-center mb-16" data-element-id="#5.1">
           <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block" data-element-id="#5.1.label">
             Portfolio
           </span>
@@ -923,11 +1079,9 @@ const ProjectsSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
           </p>
         </div>
 
-        {/* #5.2 = Projects Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative" data-element-id="#5.2">
-          {devMode && <InlineLabel id="#5.2" className="top-0 left-0" />}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-element-id="#5.2">
           {projects.map((project, index) => (
-            <ProjectCard key={index} {...project} delay={index * 100} cardIndex={index} devMode={devMode} />
+            <ProjectCard key={index} {...project} delay={index * 100} cardIndex={index} />
           ))}
         </div>
       </div>
@@ -935,20 +1089,15 @@ const ProjectsSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
   );
 };
 
-// =====================================================
-// SERVICE CARD
-// =====================================================
-
 interface ServiceCardProps {
   icon: React.ReactNode;
   titleKey: string;
   descKey: string;
   delay: number;
   cardIndex: number;
-  devMode: boolean;
 }
 
-const ServiceCard: React.FC<ServiceCardProps> = ({ icon, titleKey, descKey, delay, cardIndex, devMode }) => {
+const ServiceCard: React.FC<ServiceCardProps> = ({ icon, titleKey, descKey, delay, cardIndex }) => {
   const { t } = useLanguage();
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -973,8 +1122,6 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ icon, titleKey, descKey, dela
       }`}
       data-element-id={`#4.1.${cardIndex + 1}`}
     >
-      {devMode && <InlineLabel id={`#4.1.${cardIndex + 1}`} className="top-2 left-2" />}
-
       <div
         className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/20 flex items-center justify-center mb-6 group-hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] transition-all duration-300"
         data-element-id={`#4.1.${cardIndex + 1}.icon`}
@@ -993,57 +1140,29 @@ const ServiceCard: React.FC<ServiceCardProps> = ({ icon, titleKey, descKey, dela
   );
 };
 
-// =====================================================
-// SERVICES SECTION - #4
-// =====================================================
-
-const ServicesSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const ServicesSection: React.FC = () => {
   const { t } = useLanguage();
 
   const services = [
-    {
-      icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" /></svg>,
-      titleKey: 'services.web',
-      descKey: 'services.web.desc'
-    },
-    {
-      icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>,
-      titleKey: 'services.mobile',
-      descKey: 'services.mobile.desc'
-    },
-    {
-      icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>,
-      titleKey: 'services.ui',
-      descKey: 'services.ui.desc'
-    },
-    {
-      icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-      titleKey: 'services.games',
-      descKey: 'services.games.desc'
-    },
-    {
-      icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>,
-      titleKey: 'services.software',
-      descKey: 'services.software.desc'
-    },
+    { icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9m-9 9a9 9 0 019-9" /></svg>, titleKey: 'services.web', descKey: 'services.web.desc' },
+    { icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>, titleKey: 'services.mobile', descKey: 'services.mobile.desc' },
+    { icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>, titleKey: 'services.ui', descKey: 'services.ui.desc' },
+    { icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, titleKey: 'services.games', descKey: 'services.games.desc' },
+    { icon: <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>, titleKey: 'services.software', descKey: 'services.software.desc' },
   ];
 
   return (
-    <section id="services" className="py-32 bg-[#0B0B0B] relative" data-section-id="#4">
-      {devMode && <ArchLabel id="#4" position="top-left" />}
-
+    <section id="services" className="py-32 bg-[#0B0B0B]" data-section-id="#4">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16 relative">
-          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block">Capabilities</span>
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">{t('services.title')}</h2>
-          <p className="text-gray-400 text-lg">{t('services.subtitle')}</p>
+        <div className="text-center mb-16" data-element-id="#4.header">
+          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block" data-element-id="#4.header.label">Capabilities</span>
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4" data-element-id="#4.header.title">{t('services.title')}</h2>
+          <p className="text-gray-400 text-lg" data-element-id="#4.header.subtitle">{t('services.subtitle')}</p>
         </div>
 
-        {/* #4.1 = Services Container */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative" data-element-id="#4.1">
-          {devMode && <InlineLabel id="#4.1" className="top-0 left-0" />}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-element-id="#4.1">
           {services.map((service, index) => (
-            <ServiceCard key={index} {...service} delay={index * 100} cardIndex={index} devMode={devMode} />
+            <ServiceCard key={index} {...service} delay={index * 100} cardIndex={index} />
           ))}
         </div>
       </div>
@@ -1052,7 +1171,7 @@ const ServicesSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 };
 
 // =====================================================
-// DEVELOPER CARD
+// SECTIONS #8, #9, #10 (Developers, Articles, Clients)
 // =====================================================
 
 interface DeveloperCardProps {
@@ -1062,10 +1181,9 @@ interface DeveloperCardProps {
   bio: string;
   delay: number;
   cardIndex: number;
-  devMode: boolean;
 }
 
-const DeveloperCard: React.FC<DeveloperCardProps> = ({ image, name, role, bio, delay, cardIndex, devMode }) => {
+const DeveloperCard: React.FC<DeveloperCardProps> = ({ image, name, role, bio, delay, cardIndex }) => {
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -1089,17 +1207,18 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ image, name, role, bio, d
       }`}
       data-element-id={`#8.${cardIndex + 1}`}
     >
-      {devMode && <InlineLabel id={`#8.${cardIndex + 1}`} className="top-2 left-2" />}
-
-      <div className="relative w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden group-hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all duration-300">
+      <div
+        className="relative w-24 h-24 mx-auto mb-4 rounded-full overflow-hidden group-hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all duration-300"
+        data-element-id={`#8.${cardIndex + 1}.image`}
+      >
         <img src={image} alt={name} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-blue-500/0 to-blue-500/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
 
       <div className="text-center">
-        <h3 className="text-lg font-semibold text-blue-400 mb-1">{name}</h3>
-        <p className="text-gray-500 text-sm mb-3">{role}</p>
-        <p className="text-gray-400 text-sm leading-relaxed">{bio}</p>
+        <h3 className="text-lg font-semibold text-blue-400 mb-1" data-element-id={`#8.${cardIndex + 1}.name`}>{name}</h3>
+        <p className="text-gray-500 text-sm mb-3" data-element-id={`#8.${cardIndex + 1}.role`}>{role}</p>
+        <p className="text-gray-400 text-sm leading-relaxed" data-element-id={`#8.${cardIndex + 1}.bio`}>{bio}</p>
       </div>
 
       <div className="absolute inset-0 rounded-2xl border border-blue-500/0 group-hover:border-blue-500/20 transition-colors duration-300" />
@@ -1107,11 +1226,7 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ image, name, role, bio, d
   );
 };
 
-// =====================================================
-// DEVELOPERS SECTION - #8
-// =====================================================
-
-const DevelopersSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const DevelopersSection: React.FC = () => {
   const { t } = useLanguage();
 
   const developers = [
@@ -1122,29 +1237,23 @@ const DevelopersSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
   ];
 
   return (
-    <section id="developers" className="py-32 bg-[#050505] relative" data-section-id="#8">
-      {devMode && <ArchLabel id="#8" position="top-left" />}
-
+    <section id="developers" className="py-32 bg-[#050505]" data-section-id="#8">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block">Our Team</span>
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">{t('developers.title')}</h2>
-          <p className="text-gray-400 text-lg">{t('developers.subtitle')}</p>
+        <div className="text-center mb-16" data-element-id="#8.header">
+          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block" data-element-id="#8.header.label">Our Team</span>
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4" data-element-id="#8.header.title">{t('developers.title')}</h2>
+          <p className="text-gray-400 text-lg" data-element-id="#8.header.subtitle">{t('developers.subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" data-element-id="#8.grid">
           {developers.map((dev, index) => (
-            <DeveloperCard key={index} {...dev} delay={index * 100} cardIndex={index} devMode={devMode} />
+            <DeveloperCard key={index} {...dev} delay={index * 100} cardIndex={index} />
           ))}
         </div>
       </div>
     </section>
   );
 };
-
-// =====================================================
-// ARTICLE CARD
-// =====================================================
 
 interface ArticleCardProps {
   image: string;
@@ -1153,10 +1262,9 @@ interface ArticleCardProps {
   readTime: number;
   delay: number;
   cardIndex: number;
-  devMode: boolean;
 }
 
-const ArticleCard: React.FC<ArticleCardProps> = ({ image, titleKey, categoryKey, readTime, delay, cardIndex, devMode }) => {
+const ArticleCard: React.FC<ArticleCardProps> = ({ image, titleKey, categoryKey, readTime, delay, cardIndex }) => {
   const { t } = useLanguage();
   const [isVisible, setIsVisible] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -1181,25 +1289,24 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ image, titleKey, categoryKey,
       }`}
       data-element-id={`#9.${cardIndex + 1}`}
     >
-      {devMode && <InlineLabel id={`#9.${cardIndex + 1}`} className="top-2 left-2" />}
-
       <div className="relative rounded-2xl overflow-hidden bg-white/[0.02] border border-white/5 group-hover:border-blue-500/30 transition-all duration-300">
         <div className="aspect-[16/10] overflow-hidden">
           <img
             src={image}
             alt={t(titleKey)}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            data-element-id={`#9.${cardIndex + 1}.image`}
           />
         </div>
 
         <div className="p-6">
           <div className="flex items-center gap-4 mb-3">
-            <span className="px-3 py-1 text-xs rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <span className="px-3 py-1 text-xs rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20" data-element-id={`#9.${cardIndex + 1}.category`}>
               {t(categoryKey)}
             </span>
-            <span className="text-gray-500 text-sm">{readTime} {t('read.time')}</span>
+            <span className="text-gray-500 text-sm" data-element-id={`#9.${cardIndex + 1}.readtime`}>{readTime} {t('read.time')}</span>
           </div>
-          <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors duration-300">
+          <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition-colors duration-300" data-element-id={`#9.${cardIndex + 1}.title`}>
             {t(titleKey)}
           </h3>
         </div>
@@ -1210,11 +1317,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ image, titleKey, categoryKey,
   );
 };
 
-// =====================================================
-// ARTICLES SECTION - #9
-// =====================================================
-
-const ArticlesSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const ArticlesSection: React.FC = () => {
   const { t } = useLanguage();
 
   const articles = [
@@ -1224,19 +1327,17 @@ const ArticlesSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
   ];
 
   return (
-    <section id="articles" className="py-32 bg-[#0B0B0B] relative" data-section-id="#9">
-      {devMode && <ArchLabel id="#9" position="top-left" />}
-
+    <section id="articles" className="py-32 bg-[#0B0B0B]" data-section-id="#9">
       <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block">Insights</span>
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">{t('articles.title')}</h2>
-          <p className="text-gray-400 text-lg">{t('articles.subtitle')}</p>
+        <div className="text-center mb-16" data-element-id="#9.header">
+          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block" data-element-id="#9.header.label">Insights</span>
+          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4" data-element-id="#9.header.title">{t('articles.title')}</h2>
+          <p className="text-gray-400 text-lg" data-element-id="#9.header.subtitle">{t('articles.subtitle')}</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-element-id="#9.grid">
           {articles.map((article, index) => (
-            <ArticleCard key={index} {...article} delay={index * 100} cardIndex={index} devMode={devMode} />
+            <ArticleCard key={index} {...article} delay={index * 100} cardIndex={index} />
           ))}
         </div>
       </div>
@@ -1245,67 +1346,10 @@ const ArticlesSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 };
 
 // =====================================================
-// CLIENTS SECTION - #10
+// SECTION #7: FOOTER
 // =====================================================
 
-const ClientsSection: React.FC<{ devMode: boolean }> = ({ devMode }) => {
-  const { t } = useLanguage();
-
-  const clients = [
-    'TechVentures', 'InnovateCo', 'FutureLabs', 'DataStream', 'CloudNine', 'NextGen', 'QuantumAI', 'CyberSystems'
-  ];
-
-  return (
-    <section className="py-32 bg-[#050505] relative" data-section-id="#10">
-      {devMode && <ArchLabel id="#10" position="top-left" />}
-
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <span className="text-blue-400 text-sm font-medium tracking-wider uppercase mb-4 block">Partners</span>
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-4">{t('clients.title')}</h2>
-          <p className="text-gray-400 text-lg">{t('clients.subtitle')}</p>
-        </div>
-
-        <div className="relative overflow-hidden">
-          <div className="flex animate-scroll gap-12">
-            {clients.map((client, index) => (
-              <div
-                key={index}
-                className="flex-shrink-0 px-8 py-6 rounded-xl bg-white/[0.02] border border-white/5 hover:border-blue-500/30 transition-colors duration-300 relative"
-                data-element-id={`#10.${index + 1}`}
-              >
-                {devMode && <InlineLabel id={`#10.${index + 1}`} className="top-2 left-2" />}
-                <span className="text-xl font-semibold text-gray-400 whitespace-nowrap tracking-wider">
-                  {client}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-scroll {
-          animation: scroll 30s linear infinite;
-        }
-        @keyframes pulse-subtle {
-          0%, 100% { opacity: 0.8; }
-          50% { opacity: 1; }
-        }
-      `}</style>
-    </section>
-  );
-};
-
-// =====================================================
-// FOOTER - #7
-// =====================================================
-
-const Footer: React.FC<{ devMode: boolean }> = ({ devMode }) => {
+const Footer: React.FC = () => {
   const { t } = useLanguage();
 
   const navLinks = [
@@ -1316,36 +1360,30 @@ const Footer: React.FC<{ devMode: boolean }> = ({ devMode }) => {
   ];
 
   const socialLinks = [
-    { name: 'Twitter', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" /> },
-    { name: 'LinkedIn', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z M4 6a2 2 0 100-4 2 2 0 000 4z" /> },
-    { name: 'GitHub', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z" /> },
+    { name: 'X', url: 'https://x.com/Hor_Tech', icon: <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /> },
+    { name: 'GitHub', url: 'https://github.com', icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z" /> },
   ];
 
   return (
-    <footer id="contact" className="py-20 bg-[#0B0B0B] border-t border-white/5 relative" data-section-id="#7">
-      {devMode && <ArchLabel id="#7" position="top-left" />}
-
+    <footer id="contact" className="py-16 bg-[#0B0B0B] border-t border-white/5" data-section-id="#7">
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
           <div className="md:col-span-2">
-            {/* #7.1 = Footer Logo */}
-            <div className="flex items-center gap-3 mb-6 relative" data-element-id="#7.1">
-              {devMode && <InlineLabel id="#7.1" className="top-0 left-0" />}
-              <HORLogo section="#7.1" devMode={devMode} />
+            <div className="flex items-center gap-3 mb-6" data-element-id="#7.1">
+              <HORLogo section="#7.1" />
             </div>
-            <p className="text-gray-400 leading-relaxed mb-6 max-w-md">{t('footer.tagline')}</p>
+            <p className="text-gray-400 leading-relaxed mb-6 max-w-md" data-element-id="#7.tagline">{t('footer.tagline')}</p>
 
-            {/* #7.3 = Footer Social Icons */}
-            <div className="flex gap-4 relative" data-element-id="#7.3">
-              {devMode && <InlineLabel id="#7.3" className="top-0 left-0" />}
+            <div className="flex gap-4" data-element-id="#7.3">
               {socialLinks.map((social, index) => (
                 <a
                   key={social.name}
-                  href="#"
-                  className="w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-blue-500/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all duration-300 relative"
+                  href={social.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-blue-500/50 hover:shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:-translate-y-1 transition-all duration-300"
                   data-element-id={`#7.3.${index + 1}`}
                 >
-                  {devMode && <InlineLabel id={`#7.3.${index + 1}`} className="-top-6" />}
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                     {social.icon}
                   </svg>
@@ -1354,19 +1392,16 @@ const Footer: React.FC<{ devMode: boolean }> = ({ devMode }) => {
             </div>
           </div>
 
-          {/* #7.2 = Footer Navigation */}
-          <div className="relative" data-element-id="#7.2">
-            {devMode && <InlineLabel id="#7.2" className="top-0 left-0" />}
-            <h4 className="text-white font-semibold mb-6">Navigation</h4>
+          <div data-element-id="#7.2">
+            <h4 className="text-white font-semibold mb-6" data-element-id="#7.2.title">Navigation</h4>
             <ul className="space-y-3">
               {navLinks.map((link, index) => (
                 <li key={link.key}>
                   <a
                     href={link.href}
-                    className="text-gray-400 hover:text-white transition-colors duration-300 relative"
+                    className="text-gray-400 hover:text-white transition-colors duration-300"
                     data-element-id={`#7.2.${index + 1}`}
                   >
-                    {devMode && <InlineLabel id={`#7.2.${index + 1}`} className="-top-5 left-0" />}
                     {t(link.key)}
                   </a>
                 </li>
@@ -1374,31 +1409,31 @@ const Footer: React.FC<{ devMode: boolean }> = ({ devMode }) => {
             </ul>
           </div>
 
-          <div>
-            <h4 className="text-white font-semibold mb-6">{t('nav.contact')}</h4>
+          <div data-element-id="#7.contact">
+            <h4 className="text-white font-semibold mb-6" data-element-id="#7.contact.title">{t('nav.contact')}</h4>
             <ul className="space-y-3 text-gray-400">
-              <li>hello@nexus.tech</li>
-              <li>+1 (555) 123-4567</li>
-              <li>San Francisco, CA</li>
+              <li data-element-id="#7.4.contact-email">hello@nexus.tech</li>
+              <li>
+                <a
+                  href="https://wa.me/201025040945"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-architecture="#7.4.contact-phone"
+                  className="text-white hover:text-blue-400 transition-all duration-300 cursor-pointer"
+                  style={{
+                    textDecoration: "none",
+                    fontWeight: 500,
+                    letterSpacing: "0.5px"
+                  }}
+                >
+                  01025040945
+                </a>
+              </li>
+              <li data-element-id="#7.4.contact-location">San Francisco, CA</li>
             </ul>
           </div>
         </div>
 
-        {/* #7.4 = Footer Copyright */}
-        <div className="pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4 relative" data-element-id="#7.4">
-          {devMode && <InlineLabel id="#7.4" className="top-0 left-0" />}
-          <p className="text-gray-500 text-sm">{t('footer.copyright')}</p>
-          <div className="flex gap-6 text-gray-500 text-sm">
-            <a href="#" className="hover:text-white transition-colors relative" data-element-id="#7.4.privacy">
-              {devMode && <InlineLabel id="#7.4.privacy" className="-top-5 left-0" />}
-              Privacy Policy
-            </a>
-            <a href="#" className="hover:text-white transition-colors relative" data-element-id="#7.4.terms">
-              {devMode && <InlineLabel id="#7.4.terms" className="-top-5 left-0" />}
-              Terms of Service
-            </a>
-          </div>
-        </div>
       </div>
     </footer>
   );
@@ -1409,53 +1444,35 @@ const Footer: React.FC<{ devMode: boolean }> = ({ devMode }) => {
 // =====================================================
 
 const AppContent: React.FC = () => {
-  const [showIntro, setShowIntro] = useState(true);
-  const [websiteReady, setWebsiteReady] = useState(false);
   const [devMode, setDevMode] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setWebsiteReady(true);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Keyboard shortcut handler for Developer Mode
-  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      if (e.altKey && e.shiftKey && e.key === 'X') {
         e.preventDefault();
         setDevMode(prev => !prev);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  if (showIntro) {
-    return <IntroAnimation onComplete={() => setShowIntro(false)} />;
-  }
-
   return (
     <div
-      className={`min-h-screen bg-[#050505] transition-opacity duration-1000 ${websiteReady ? 'opacity-100' : 'opacity-0'}`}
+      className="min-h-screen bg-[#050505]"
       data-website-id="#ARCHITECTURE-SYSTEM-005"
     >
-      {/* Developer Mode Overlay Panel */}
-      <ArchitectureOverlay isActive={devMode} />
+      <Navigation />
+      <HeroSection />
+      <ProjectsSection />
+      <ServicesSection />
+      <DevelopersSection />
+      <ArticlesSection />
+      <Footer />
 
-      {/* Developer Mode Toggle Button */}
       <DeveloperModeToggle isActive={devMode} onToggle={() => setDevMode(!devMode)} />
-
-      <Navigation devMode={devMode} />
-      <HeroSection devMode={devMode} />
-      <ProjectsSection devMode={devMode} />
-      <ServicesSection devMode={devMode} />
-      <DevelopersSection devMode={devMode} />
-      <ArticlesSection devMode={devMode} />
-      <ClientsSection devMode={devMode} />
-      <Footer devMode={devMode} />
+      <ArchitectureInfoPanel isActive={devMode} />
+      <SmartInspector isActive={devMode} />
     </div>
   );
 };
